@@ -32,6 +32,8 @@
   ::-webkit-scrollbar-track{background:transparent;}
   th.sortable{cursor:pointer;user-select:none;}
   th.sortable:hover{color:#1d4ed8;}
+  .sort-touch-btn{display:flex;align-items:center;justify-content:space-between;gap:6px;width:100%;min-height:34px;text-align:left;touch-action:manipulation;-webkit-tap-highlight-color:rgba(37,99,235,0.16);}
+  .sort-touch-btn:active{color:#1d4ed8;}
   input[type="date"]::-webkit-calendar-picker-indicator{cursor:pointer;}
   .mobile-table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;}
   .mobile-table-scroll table{width:100%;}
@@ -46,6 +48,10 @@
     button, select, input{min-height:40px;}
     table{font-size:12px;}
     th, td{line-height:1.45;}
+    th.sortable{padding:2px!important;}
+    .sort-touch-btn{min-height:44px;padding:10px 12px;border-radius:8px;background:rgba(248,250,252,0.9);}
+    .sort-touch-btn .sort-label{white-space:nowrap;}
+    .sort-touch-btn .sort-mark{min-width:14px;text-align:right;color:#2563eb;font-weight:800;}
     #statsGrid, #decisionSummaryGrid, #signalOutcomeSummaryGrid, #performanceKpiGrid{grid-template-columns:repeat(2,minmax(0,1fr))!important;}
     #performanceStrategyCards{grid-template-columns:1fr!important;}
     .mobile-stack{display:flex;flex-direction:column;align-items:stretch!important;}
@@ -4684,9 +4690,10 @@ function renderPerformanceKpis(rows){
 
 function performanceTableHeader(label, sortKey = ""){
   const active = sortKey && performanceTrackingSortField === sortKey;
-  const mark = active ? (performanceTrackingSortAsc ? " ↑" : " ↓") : "";
+  const mark = active ? (performanceTrackingSortAsc ? "↑" : "↓") : "";
   const attr = sortKey ? ` data-performance-sort="${sortKey}"` : "";
-  return `<th${attr} class="text-left px-3 py-2.5 whitespace-nowrap ${sortKey ? "sortable" : ""}">${escapeHtml(label + mark)}</th>`;
+  if(!sortKey) return `<th class="text-left px-3 py-2.5 whitespace-nowrap">${escapeHtml(label)}</th>`;
+  return `<th${attr} class="text-left px-3 py-2.5 whitespace-nowrap sortable" aria-sort="${active ? (performanceTrackingSortAsc ? "ascending" : "descending") : "none"}"><button type="button" class="sort-touch-btn" tabindex="0"><span class="sort-label">${escapeHtml(label)}</span><span class="sort-mark">${escapeHtml(mark)}</span></button></th>`;
 }
 
 function performanceRowSortValue(row, key){
@@ -4750,8 +4757,8 @@ function getPerformanceRawRows(strategy, period){
 
 function performanceDetailHeader(label, key){
   const active = performanceDetailSortField === key;
-  const mark = active ? (performanceDetailSortAsc ? " ↑" : " ↓") : "";
-  return `<th data-performance-detail-sort="${escapeHtml(key)}" class="sortable text-left px-3 py-2.5 whitespace-nowrap">${escapeHtml(label + mark)}</th>`;
+  const mark = active ? (performanceDetailSortAsc ? "↑" : "↓") : "";
+  return `<th data-performance-detail-sort="${escapeHtml(key)}" class="sortable text-left px-3 py-2.5 whitespace-nowrap" aria-sort="${active ? (performanceDetailSortAsc ? "ascending" : "descending") : "none"}"><button type="button" class="sort-touch-btn" tabindex="0"><span class="sort-label">${escapeHtml(label)}</span><span class="sort-mark">${escapeHtml(mark)}</span></button></th>`;
 }
 
 function performanceDetailReturnPct(row, period){
