@@ -1053,6 +1053,9 @@ let signalOutcomeSortField = "";
 let signalOutcomeSortAsc = false;
 let performanceTrackingSortField = "default";
 let performanceTrackingSortAsc = false;
+let performanceDetailSortField = "signal_date";
+let performanceDetailSortAsc = false;
+let activePerformanceDetail = null;
 let signalOutcomeBackfillRunning = false;
 let signalOutcomeBackfillAbortRequested = false;
 let signalOutcomeBackfillFailures = [];
@@ -4602,7 +4605,7 @@ function computeStrategyPerformance(rows){
   }));
 }
 
-function performanceSortMetric(item, sortKey){
+function performanceStrategySortMetric(item, sortKey){
   const p = item.periods;
   if(sortKey === "d1_win_rate") return p.D1.win_rate ?? -Infinity;
   if(sortKey === "d3_win_rate") return p.D3.win_rate ?? -Infinity;
@@ -4616,8 +4619,8 @@ function sortStrategyPerformance(items){
   const sortKey = getPerformanceFilters().sort || performanceTrackingSortField || "default";
   return [...items].sort((a, b) => {
     if(sortKey !== "default"){
-      const av = performanceSortMetric(a, sortKey);
-      const bv = performanceSortMetric(b, sortKey);
+      const av = performanceStrategySortMetric(a, sortKey);
+      const bv = performanceStrategySortMetric(b, sortKey);
       if(av !== bv) return performanceTrackingSortAsc ? av - bv : bv - av;
     }
     const checks = [
@@ -4680,10 +4683,55 @@ function renderPerformanceKpis(rows){
 }
 
 function performanceTableHeader(label, sortKey = ""){
-  const active = sortKey && getPerformanceFilters().sort === sortKey;
+  const active = sortKey && performanceTrackingSortField === sortKey;
   const mark = active ? (performanceTrackingSortAsc ? " ↑" : " ↓") : "";
   const attr = sortKey ? ` data-performance-sort="${sortKey}"` : "";
   return `<th${attr} class="text-left px-3 py-2.5 whitespace-nowrap ${sortKey ? "sortable" : ""}">${escapeHtml(label + mark)}</th>`;
+}
+
+function performanceRowSortValue(row, key){
+  const stat = row.stat || {};
+  if(key === "strategy") return row.strategy || "";
+  if(key === "period") return row.period || "";
+  if(key === "sample_count") return stat.sample_count ?? -Infinity;
+  if(key === "win_rate") return stat.win_rate ?? -Infinity;
+  if(key === "avg_return") return stat.avg_return ?? -Infinity;
+  if(key === "median_return") return stat.median_return ?? -Infinity;
+  if(key === "max_return") return stat.max_return ?? -Infinity;
+  if(key === "min_return") return stat.min_return ?? -Infinity;
+  if(key === "success_count") return stat.success_count ?? -Infinity;
+  if(key === "failure_count") return stat.failure_count ?? -Infinity;
+  if(key === "unfinished_count") return stat.unfinished_count ?? -Infinity;
+  return "";
+}
+
+function comparePerformanceValues(a, b, asc){
+  const aEmpty = a === null || a === undefined || a === "";
+  const bEmpty = b === null || b === undefined || b === "";
+  if(aEmpty && bEmpty) return 0;
+  if(aEmpty) return 1;
+  if(bEmpty) return -1;
+  const an = toNumber(a);
+  const bn = toNumber(b);
+  if(an !== null && bn !== null){
+    if(an !== bn) return asc ? an - bn : bn - an;
+    return 0;
+  }
+  const as = String(a ?? "");
+  const bs = String(b ?? "");
+  return asc ? as.localeCompare(bs, "zh-Hant") : bs.localeCompare(as, "zh-Hant");
+}
+
+function sortPerformanceTableRows(rows){
+  const key = performanceTrackingSortField || "default";
+  if(key === "default"){
+    return rows;
+  }
+  return [...rows].sort((a, b) => {
+    const result = comparePerformanceValues(performanceRowSortValue(a, key), performanceRowSortValue(b, key), performanceTrackingSortAsc);
+    if(result !== 0) return result;
+    return String(a.strategy).localeCompare(String(b.strategy), "zh-Hant") || String(a.period).localeCompare(String(b.period), "zh-Hant");
+  });
 }
 
 function getPerformanceRawRows(strategy, period){
@@ -4700,6 +4748,41 @@ function getPerformanceRawRows(strategy, period){
   });
 }
 
+function performanceDetailHeader(label, key){
+  const active = performanceDetailSortField === key;
+  const mark = active ? (performanceDetailSortAsc ? " ↑" : " ↓") : "";
+  return `<th data-performance-detail-sort="${escapeHtml(key)}" class="sortable text-left px-3 py-2.5 whitespace-nowrap">${escapeHtml(label + mark)}</th>`;
+}
+
+function performanceDetailReturnPct(row, period){
+  return toNumber(performanceFirstValue(row, ["return_pct", "return", "return_percent", "pct_return"])) ?? performanceReturnFromFields(row, period);
+}
+
+function performanceDetailSortValue(row, key, period){
+  if(key === "signal_date") return row.signal_date || row.date || "";
+  if(key === "check_date") return row.check_date || "";
+  if(key === "stock") return `${safeValue(row.name)} ${safeValue(row.symbol)}`;
+  if(key === "strategy") return normalizePerformanceStrategy(row);
+  if(key === "entry_price") return toNumber(row.entry_price);
+  if(key === "close") return toNumber(row.close);
+  if(key === "high") return toNumber(row.high);
+  if(key === "low") return toNumber(row.low);
+  if(key === "return_pct") return performanceDetailReturnPct(row, period);
+  if(key === "max_gain_pct") return toNumber(row.max_gain_pct);
+  if(key === "max_drawdown_pct") return toNumber(row.max_drawdown_pct);
+  if(key === "outcome_id") return safeValue(row.outcome_id);
+  return "";
+}
+
+function sortPerformanceDetailRows(rows, period){
+  const key = performanceDetailSortField || "signal_date";
+  return [...rows].sort((a, b) => {
+    const result = comparePerformanceValues(performanceDetailSortValue(a, key, period), performanceDetailSortValue(b, key, period), performanceDetailSortAsc);
+    if(result !== 0) return result;
+    return String(safeValue(a.symbol)).localeCompare(String(safeValue(b.symbol)), "zh-Hant");
+  });
+}
+
 function renderPerformanceDetail(strategy, period){
   const el = document.getElementById("performanceDetailBox");
   if(!el) return;
@@ -4709,9 +4792,11 @@ function renderPerformanceDetail(strategy, period){
     return;
   }
   const completed = rows.filter(row => {
-    const value = toNumber(performanceFirstValue(row, ["return_pct", "return", "return_percent", "pct_return"])) ?? performanceReturnFromFields(row, period);
+    const value = performanceDetailReturnPct(row, period);
     return value !== null;
   }).length;
+  const sortedRows = sortPerformanceDetailRows(rows, period);
+  activePerformanceDetail = { strategy, period };
   el.innerHTML = `
     <div class="rounded-xl border border-slate-200 bg-white p-3">
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
@@ -4724,21 +4809,21 @@ function renderPerformanceDetail(strategy, period){
       <div class="mobile-table-scroll rounded-lg border border-slate-100">
         <table class="min-w-[1120px] w-full text-xs">
           <thead><tr class="bg-slate-50 text-slate-500 text-[11px] uppercase tracking-wide">
-            <th class="text-left px-3 py-2.5 whitespace-nowrap">signal_date</th>
-            <th class="text-left px-3 py-2.5 whitespace-nowrap">check_date</th>
-            <th class="text-left px-3 py-2.5 whitespace-nowrap">股票</th>
-            <th class="text-left px-3 py-2.5 whitespace-nowrap">策略</th>
-            <th class="text-left px-3 py-2.5 whitespace-nowrap">entry</th>
-            <th class="text-left px-3 py-2.5 whitespace-nowrap">close</th>
-            <th class="text-left px-3 py-2.5 whitespace-nowrap">high</th>
-            <th class="text-left px-3 py-2.5 whitespace-nowrap">low</th>
-            <th class="text-left px-3 py-2.5 whitespace-nowrap">return_pct</th>
-            <th class="text-left px-3 py-2.5 whitespace-nowrap">max_gain_pct</th>
-            <th class="text-left px-3 py-2.5 whitespace-nowrap">max_drawdown_pct</th>
-            <th class="text-left px-3 py-2.5 whitespace-nowrap">outcome_id</th>
+            ${performanceDetailHeader("signal_date", "signal_date")}
+            ${performanceDetailHeader("check_date", "check_date")}
+            ${performanceDetailHeader("股票", "stock")}
+            ${performanceDetailHeader("策略", "strategy")}
+            ${performanceDetailHeader("entry", "entry_price")}
+            ${performanceDetailHeader("close", "close")}
+            ${performanceDetailHeader("high", "high")}
+            ${performanceDetailHeader("low", "low")}
+            ${performanceDetailHeader("return_pct", "return_pct")}
+            ${performanceDetailHeader("max_gain_pct", "max_gain_pct")}
+            ${performanceDetailHeader("max_drawdown_pct", "max_drawdown_pct")}
+            ${performanceDetailHeader("outcome_id", "outcome_id")}
           </tr></thead>
-          <tbody class="divide-y divide-slate-100">${rows.map(row => {
-            const returnPct = toNumber(performanceFirstValue(row, ["return_pct", "return", "return_percent", "pct_return"])) ?? performanceReturnFromFields(row, period);
+          <tbody class="divide-y divide-slate-100">${sortedRows.map(row => {
+            const returnPct = performanceDetailReturnPct(row, period);
             return `<tr class="hover:bg-slate-50">
               <td class="px-3 py-2 whitespace-nowrap">${escapeHtml(safeValue(row.signal_date || row.date))}</td>
               <td class="px-3 py-2 whitespace-nowrap">${escapeHtml(safeValue(row.check_date))}</td>
@@ -4772,26 +4857,27 @@ function renderPerformanceTable(items){
       rows.push({ strategy: item.strategy, period, stat });
     });
   });
+  const sortedRows = sortPerformanceTableRows(rows);
   if(!rows.length){
     el.innerHTML = `<div class="text-center text-slate-400 py-10">目前尚無符合篩選條件的績效資料</div>`;
     return;
   }
   el.innerHTML = `<table class="min-w-[920px] text-xs sm:text-sm">
     <thead><tr class="bg-slate-50 text-slate-500 text-[11px] uppercase tracking-wide">
-      ${performanceTableHeader("策略")}
-      ${performanceTableHeader("週期")}
+      ${performanceTableHeader("策略", "strategy")}
+      ${performanceTableHeader("週期", "period")}
       ${performanceTableHeader("樣本數", "sample_count")}
-      ${performanceTableHeader("勝率", "d10_win_rate")}
+      ${performanceTableHeader("勝率", "win_rate")}
       ${performanceTableHeader("平均報酬", "avg_return")}
-      ${performanceTableHeader("中位數")}
-      ${performanceTableHeader("最高")}
-      ${performanceTableHeader("最低")}
-      ${performanceTableHeader("成功")}
-      ${performanceTableHeader("失敗")}
-      ${performanceTableHeader("未完成")}
+      ${performanceTableHeader("中位數", "median_return")}
+      ${performanceTableHeader("最高", "max_return")}
+      ${performanceTableHeader("最低", "min_return")}
+      ${performanceTableHeader("成功", "success_count")}
+      ${performanceTableHeader("失敗", "failure_count")}
+      ${performanceTableHeader("未完成", "unfinished_count")}
       ${performanceTableHeader("操作")}
     </tr></thead>
-    <tbody class="divide-y divide-slate-100">${rows.map(row => {
+    <tbody class="divide-y divide-slate-100">${sortedRows.map(row => {
       const s = row.stat;
       return `<tr class="hover:bg-slate-50">
         <td class="px-3 py-2 whitespace-nowrap font-semibold text-slate-800">${escapeHtml(row.strategy)}</td>
@@ -9917,9 +10003,12 @@ function bindEvents(){
     const actionBtn = event.target.closest("[data-performance-action]");
     if(actionBtn){
       if(actionBtn.dataset.performanceAction === "view-detail"){
+        performanceDetailSortField = "signal_date";
+        performanceDetailSortAsc = false;
         renderPerformanceDetail(actionBtn.dataset.performanceStrategy || "", actionBtn.dataset.performancePeriod || "");
       }else if(actionBtn.dataset.performanceAction === "close-detail"){
         document.getElementById("performanceDetailBox").innerHTML = "";
+        activePerformanceDetail = null;
       }
       return;
     }
@@ -9933,8 +10022,21 @@ function bindEvents(){
     renderPerformanceTracking();
   });
   document.getElementById("performanceDetailBox")?.addEventListener("click", (event) => {
+    const header = event.target.closest("[data-performance-detail-sort]");
+    if(header){
+      const key = header.dataset.performanceDetailSort;
+      performanceDetailSortAsc = performanceDetailSortField === key ? !performanceDetailSortAsc : false;
+      performanceDetailSortField = key;
+      if(activePerformanceDetail){
+        renderPerformanceDetail(activePerformanceDetail.strategy, activePerformanceDetail.period);
+      }
+      return;
+    }
     const btn = event.target.closest("[data-performance-action='close-detail']");
-    if(btn) document.getElementById("performanceDetailBox").innerHTML = "";
+    if(btn){
+      document.getElementById("performanceDetailBox").innerHTML = "";
+      activePerformanceDetail = null;
+    }
   });
   document.getElementById("generateSignalOutcomesBtn").addEventListener("click", () => {
     invalidateFactorAnalysisExport();
