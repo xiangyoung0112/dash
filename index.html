@@ -109,7 +109,6 @@
             <option value="double_dh">double_dh</option>
             <option value="short_dh">short_dh</option>
             <option value="dark_horse">dark_horse</option>
-            <option value="observe">observe</option>
           </select>
         </div>
         <div>
@@ -300,7 +299,6 @@
               <option value="double_dh">double_dh</option>
               <option value="short_dh">short_dh</option>
               <option value="dark_horse">dark_horse</option>
-              <option value="observe">observe</option>
             </select>
             <input id="paperSearchInput" type="text" placeholder="搜尋 symbol / name / theme" class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400">
             <button id="deleteFilteredPaperPositionsBtn" type="button" data-paper-action="delete-filtered" class="px-3 py-2 rounded-lg border border-rose-200 text-xs font-semibold text-rose-500 hover:bg-rose-50 transition">刪除目前篩選持倉</button>
@@ -337,7 +335,6 @@
               <option value="double_dh">double_dh</option>
               <option value="short_dh">short_dh</option>
               <option value="dark_horse">dark_horse</option>
-              <option value="observe">observe</option>
             </select>
             <select id="outcomeCheckLabelFilter" class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400">
               <option value="">全部週期</option>
@@ -525,6 +522,17 @@
         </div>
         <div id="performanceStrategyCards" class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3"></div>
       </section>
+
+      <section class="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+          <div>
+            <h2 class="text-sm font-bold text-slate-900">大盤環境勝率分析</h2>
+            <div id="marketPerformanceStatus" class="text-xs text-slate-400 mt-1">使用 market_daily_snapshots 對應 signal_outcomes.signal_date。</div>
+          </div>
+          <button id="reloadMarketDailyBtn" type="button" class="px-3 py-2 rounded-lg border border-slate-200 text-xs font-semibold text-slate-600 hover:border-blue-400 hover:text-blue-600 transition">重新載入大盤快照</button>
+        </div>
+        <div id="marketPerformanceBox" class="space-y-4"></div>
+      </section>
     </section>
   </div>
 
@@ -642,7 +650,7 @@
           <label class="block"><span class="block text-xs text-slate-500 mb-1.5">因子名稱</span><input id="adjustFactorName" type="text" class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" placeholder="例如 DBN / Hurst / RR"></label>
           <label class="block"><span class="block text-xs text-slate-500 mb-1.5">舊權重</span><input id="adjustOldWeight" type="number" step="0.01" class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"></label>
           <label class="block"><span class="block text-xs text-slate-500 mb-1.5">新權重</span><input id="adjustNewWeight" type="number" step="0.01" class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"></label>
-          <label class="block"><span class="block text-xs text-slate-500 mb-1.5">策略</span><select id="adjustStrategy" class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"><option value="">全部/未指定</option><option value="double_dh">double_dh</option><option value="short_dh">short_dh</option><option value="dark_horse">dark_horse</option><option value="observe">observe</option></select></label>
+          <label class="block"><span class="block text-xs text-slate-500 mb-1.5">策略</span><select id="adjustStrategy" class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"><option value="">全部/未指定</option><option value="double_dh">double_dh</option><option value="short_dh">short_dh</option><option value="dark_horse">dark_horse</option></select></label>
           <label class="block"><span class="block text-xs text-slate-500 mb-1.5">評估週期</span><select id="adjustWindow" class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"><option value="D1">D1</option><option value="D3">D3</option><option value="D10" selected>D10</option></select></label>
           <label class="block"><span class="block text-xs text-slate-500 mb-1.5">調整前績效</span><input id="adjustPerformanceBefore" type="number" step="0.01" class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"></label>
           <label class="block"><span class="block text-xs text-slate-500 mb-1.5">調整後績效</span><input id="adjustPerformanceAfter" type="number" step="0.01" class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"></label>
@@ -684,7 +692,6 @@
           <option value="double_dh">double_dh</option>
           <option value="short_dh">short_dh</option>
           <option value="dark_horse">dark_horse</option>
-          <option value="observe">observe</option>
         </select>
       </div>
 
@@ -1049,6 +1056,8 @@ let paperPriceUpdates = [];
 let paperPriceUpdatesLoaded = false;
 let signalOutcomes = [];
 let signalOutcomesLoaded = false;
+let marketDailySnapshots = [];
+let marketDailyLoaded = false;
 let failedPriceSymbols = [];
 let activePaperWatchItem = null;
 let activePaperExitPosition = null;
@@ -1085,7 +1094,7 @@ let signalOutcomeBackfillCandidateStats = {
   available: 0,
   futureSkipped: 0,
 };
-const STRATEGY_LABELS = ["double_dh", "short_dh", "dark_horse", "observe"];
+const STRATEGY_LABELS = ["double_dh", "short_dh", "dark_horse"];
 const SIGNAL_OUTCOME_CHECKS = [
   { label: "D1", days: 1 },
   { label: "D3", days: 3 },
@@ -1479,7 +1488,6 @@ const STRATEGY_CLASS = {
   double_dh:  "bg-amber-100 text-amber-800",
   short_dh:   "bg-sky-100 text-sky-700",
   dark_horse: "bg-violet-100 text-violet-700",
-  observe:    "bg-slate-100 text-slate-500",
   unknown:    "bg-slate-100 text-slate-500",
 };
 const PILL_BASE = "inline-block px-2.5 py-0.5 rounded-full text-[11px] font-semibold";
@@ -1888,7 +1896,7 @@ async function loadData(){
 
     setBadge(badgeConn, true, "已連線", "讀取失敗");
 
-    allRows = Array.isArray(data) ? data : [];
+    allRows = (Array.isArray(data) ? data : []).filter(row => row?.strategy !== "observe");
     populateFilterOptions();
     applyFilters();
     autoReevaluateExperimentsOnLoad();
@@ -2615,7 +2623,6 @@ const DEFAULT_OPTIMIZATION_PARAMS = {
   double_dh_strategy_weight: 0.30,
   short_dh_strategy_weight: 0.20,
   dark_horse_strategy_weight: 0.10,
-  observe_strategy_weight: 0,
   score_threshold: 4.85,
   rr_threshold: 1.00,
 };
@@ -2683,7 +2690,6 @@ function getDecisionScore(row, params = null){
     double_dh: activeParams.double_dh_strategy_weight,
     short_dh: activeParams.short_dh_strategy_weight,
     dark_horse: activeParams.dark_horse_strategy_weight,
-    observe: activeParams.observe_strategy_weight,
   };
   const strategyWeight = strategyWeightMap[row.strategy] || 0;
   const dbn = toNumber(row.dbn);
@@ -2762,7 +2768,6 @@ function getReviewReasons(row, params = null){
   if(toNumber(row.alpha) === null) reasons.push("Alpha 缺失");
   if(toNumber(row.stop_loss) === null) reasons.push("停損缺失");
   if(toNumber(row.entry_price) === null) reasons.push("進場價缺失");
-  if(row.strategy === "observe" && score !== null && score >= activeParams.score_threshold) reasons.push("觀察名單高分");
   if(parseTriggerReason(row.trigger_reason).length === 0) reasons.push("Trigger 缺失");
   return reasons;
 }
@@ -4420,11 +4425,34 @@ async function loadSignalOutcomes(){
     return;
   }
 
-  signalOutcomes = Array.isArray(data) ? data : [];
+  signalOutcomes = (Array.isArray(data) ? data : []).filter(row => normalizePerformanceStrategy(row) !== "observe");
   signalOutcomesLoaded = true;
   showSignalOutcomeStatus(`已載入 ${signalOutcomes.length} 筆 Signal Outcomes。`, "success");
   renderSignalOutcomes();
   if(activeTab === "performance") renderPerformanceTracking();
+}
+
+async function loadMarketDailySnapshots(){
+  if(!supabaseClient){
+    const ready = initSupabase();
+    if(!ready) return;
+  }
+  const { data, error } = await supabaseClient
+    .from("market_daily_snapshots")
+    .select("*")
+    .order("date", { ascending: false })
+    .limit(500);
+  if(error){
+    marketDailySnapshots = [];
+    marketDailyLoaded = false;
+    const el = document.getElementById("marketPerformanceStatus");
+    if(el) el.textContent = "尚無大盤每日快照，請先在 Telegram 執行 /export 產生 market_daily_snapshots。";
+    renderMarketPerformanceAnalysis();
+    return;
+  }
+  marketDailySnapshots = Array.isArray(data) ? data : [];
+  marketDailyLoaded = true;
+  renderMarketPerformanceAnalysis();
 }
 
 function getFilteredSignalOutcomes(){
@@ -4959,6 +4987,108 @@ function renderPerformanceCards(items){
   `).join("");
 }
 
+function marketSnapshotByDate(){
+  const map = new Map();
+  marketDailySnapshots.forEach(row => {
+    if(row?.date) map.set(String(row.date).slice(0, 10), row);
+  });
+  return map;
+}
+
+function marketPerformanceRows(){
+  const marketMap = marketSnapshotByDate();
+  return normalizedPerformanceSignals().map(row => ({
+    ...row,
+    market: marketMap.get(String(row.date || "").slice(0, 10)) || null,
+  })).filter(row => row.market);
+}
+
+function summarizeMarketPerformance(rows){
+  const stats = {
+    sample_count: rows.length,
+    d1: computePeriodStats(rows, "D1"),
+    d3: computePeriodStats(rows, "D3"),
+    d10: computePeriodStats(rows, "D10"),
+  };
+  return stats;
+}
+
+function groupMarketPerformance(rows, keyFn){
+  const map = new Map();
+  rows.forEach(row => {
+    const key = keyFn(row);
+    if(!key) return;
+    if(!map.has(key)) map.set(key, []);
+    map.get(key).push(row);
+  });
+  return [...map.entries()].map(([key, groupRows]) => ({ key, rows: groupRows, stats: summarizeMarketPerformance(groupRows) }));
+}
+
+function marketPerformanceTable(title, headers, rowsHtml, emptyText){
+  return `
+    <div>
+      <h3 class="text-xs font-bold text-slate-900 mb-2">${escapeHtml(title)}</h3>
+      <div class="mobile-table-scroll rounded-lg border border-slate-100">
+        ${rowsHtml ? `<table class="min-w-[760px] w-full text-xs"><thead><tr class="bg-slate-50 text-slate-500 text-[11px] uppercase tracking-wide">${headers}</tr></thead><tbody class="divide-y divide-slate-100">${rowsHtml}</tbody></table>` : `<div class="text-center text-slate-400 py-8">${escapeHtml(emptyText)}</div>`}
+      </div>
+    </div>`;
+}
+
+function renderMarketPerformanceAnalysis(){
+  const box = document.getElementById("marketPerformanceBox");
+  const status = document.getElementById("marketPerformanceStatus");
+  if(!box) return;
+  if(!marketDailySnapshots.length){
+    if(status) status.textContent = "尚無大盤每日快照，請先在 Telegram 執行 /export 產生 market_daily_snapshots。";
+    box.innerHTML = `<div class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-xs text-amber-700">尚無大盤每日快照，請先在 Telegram 執行 /export 產生 market_daily_snapshots。</div>`;
+    return;
+  }
+  const rows = marketPerformanceRows();
+  if(status) status.textContent = `已載入 ${marketDailySnapshots.length} 筆大盤快照，可對應 ${rows.length} 組訊號。`;
+  const th = labels => labels.map(label => `<th class="text-left px-3 py-2.5 whitespace-nowrap">${escapeHtml(label)}</th>`).join("");
+  const byDirection = groupMarketPerformance(rows, row => row.market.direction || "unknown")
+    .sort((a, b) => b.stats.sample_count - a.stats.sample_count);
+  const directionRows = byDirection.map(item => `
+    <tr>
+      <td class="px-3 py-2 font-semibold">${escapeHtml(item.key)}</td>
+      <td class="px-3 py-2 font-mono">${formatNumber(item.stats.sample_count, 0)}</td>
+      <td class="px-3 py-2 font-mono ${performanceWinRateClass(item.stats.d1.win_rate)}">${formatPercent(item.stats.d1.win_rate, 1)}</td>
+      <td class="px-3 py-2 font-mono ${performanceWinRateClass(item.stats.d3.win_rate)}">${formatPercent(item.stats.d3.win_rate, 1)}</td>
+      <td class="px-3 py-2 font-mono ${performanceWinRateClass(item.stats.d10.win_rate)}">${formatPercent(item.stats.d10.win_rate, 1)}</td>
+      <td class="px-3 py-2 font-mono ${pnlClass(item.stats.d1.avg_return)}">${formatPercent(item.stats.d1.avg_return, 2)}</td>
+      <td class="px-3 py-2 font-mono ${pnlClass(item.stats.d3.avg_return)}">${formatPercent(item.stats.d3.avg_return, 2)}</td>
+      <td class="px-3 py-2 font-mono ${pnlClass(item.stats.d10.avg_return)}">${formatPercent(item.stats.d10.avg_return, 2)}</td>
+    </tr>`).join("");
+  const byStrategyDirection = groupMarketPerformance(rows, row => `${row.strategy}__${row.market.direction || "unknown"}`)
+    .sort((a, b) => b.stats.sample_count - a.stats.sample_count);
+  const strategyRows = byStrategyDirection.map(item => {
+    const [strategy, direction] = item.key.split("__");
+    return `<tr>
+      <td class="px-3 py-2 font-semibold">${escapeHtml(strategy)}</td>
+      <td class="px-3 py-2">${escapeHtml(direction)}</td>
+      <td class="px-3 py-2 font-mono">${formatNumber(item.stats.sample_count, 0)}</td>
+      <td class="px-3 py-2 font-mono ${performanceWinRateClass(item.stats.d1.win_rate)}">${formatPercent(item.stats.d1.win_rate, 1)}</td>
+      <td class="px-3 py-2 font-mono ${performanceWinRateClass(item.stats.d3.win_rate)}">${formatPercent(item.stats.d3.win_rate, 1)}</td>
+      <td class="px-3 py-2 font-mono ${performanceWinRateClass(item.stats.d10.win_rate)}">${formatPercent(item.stats.d10.win_rate, 1)}</td>
+      <td class="px-3 py-2 font-mono ${pnlClass(item.stats.d10.avg_return)}">${formatPercent(item.stats.d10.avg_return, 2)}</td>
+    </tr>`;
+  }).join("");
+  const byRegime = groupMarketPerformance(rows, row => row.market.market_regime || "neutral")
+    .sort((a, b) => b.stats.sample_count - a.stats.sample_count);
+  const regimeRows = byRegime.map(item => `
+    <tr>
+      <td class="px-3 py-2 font-semibold">${escapeHtml(item.key)}</td>
+      <td class="px-3 py-2 font-mono">${formatNumber(item.stats.sample_count, 0)}</td>
+      <td class="px-3 py-2 font-mono ${performanceWinRateClass(item.stats.d10.win_rate)}">${formatPercent(item.stats.d10.win_rate, 1)}</td>
+      <td class="px-3 py-2 font-mono ${pnlClass(item.stats.d10.avg_return)}">${formatPercent(item.stats.d10.avg_return, 2)}</td>
+    </tr>`).join("");
+  box.innerHTML = [
+    marketPerformanceTable("依大盤方向統計", th(["direction", "樣本數", "D1 正報酬勝率", "D3 正報酬勝率", "D10 正報酬勝率", "平均 D1 報酬", "平均 D3 報酬", "平均 D10 報酬"]), directionRows, "目前沒有可對應的大盤方向資料"),
+    marketPerformanceTable("依 strategy + direction 統計", th(["strategy", "direction", "樣本數", "D1 正報酬勝率", "D3 正報酬勝率", "D10 正報酬勝率", "平均 D10 報酬"]), strategyRows, "目前沒有 strategy + direction 資料"),
+    marketPerformanceTable("依 market_regime 統計", th(["market_regime", "樣本數", "D10 正報酬勝率", "平均 D10 報酬"]), regimeRows, "目前沒有 market_regime 資料"),
+  ].join("");
+}
+
 function renderPerformanceTracking(){
   const statusEl = document.getElementById("performanceTrackingStatus");
   if(!statusEl) return;
@@ -4975,6 +5105,8 @@ function renderPerformanceTracking(){
   const strategyItems = sortStrategyPerformance(computeStrategyPerformance(filtered));
   renderPerformanceTable(strategyItems);
   renderPerformanceCards(strategyItems);
+  if(!marketDailyLoaded) loadMarketDailySnapshots();
+  else renderMarketPerformanceAnalysis();
   performanceStatus(`已統計 ${filtered.length} 組訊號，策略數 ${strategyItems.length}。`, "success");
 }
 
@@ -10006,6 +10138,7 @@ function bindEvents(){
     if(!signalOutcomesLoaded) loadSignalOutcomes();
     else renderPerformanceTracking();
   });
+  document.getElementById("reloadMarketDailyBtn")?.addEventListener("click", loadMarketDailySnapshots);
   document.getElementById("performanceTableBox")?.addEventListener("click", (event) => {
     const actionBtn = event.target.closest("[data-performance-action]");
     if(actionBtn){
