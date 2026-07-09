@@ -8761,6 +8761,40 @@ async function insertSignalOutcomeTasks(rowsToInsert){
   }
 }
 
+async function updateExistingPendingSignalOutcomeCheckDates(taskRows, existingIds){
+  let updated = 0;
+  const existingSet = existingIds instanceof Set ? existingIds : new Set(existingIds || []);
+  const existingTasks = taskRows.filter(row => row.outcome_id && existingSet.has(row.outcome_id));
+  for(const task of existingTasks){
+    const { data, error } = await supabaseClient
+      .from("signal_outcomes")
+      .update({
+        check_date: task.check_date,
+        signal_date: task.signal_date,
+        check_label: task.check_label,
+      })
+      .eq("outcome_id", task.outcome_id)
+      .or("close.is.null,return_pct.is.null")
+      .select("outcome_id, check_date");
+    if(error) throw error;
+    updated += Array.isArray(data) ? data.length : 0;
+  }
+  return updated;
+}
+
+function signalOutcomeDatePreviewText(taskRows){
+  const firstByLabel = {};
+  taskRows.forEach(row => {
+    if(row?.check_label && row?.check_date && !firstByLabel[row.check_label]){
+      firstByLabel[row.check_label] = row.check_date;
+    }
+  });
+  return ["D1", "D3", "D5", "D10"]
+    .filter(label => firstByLabel[label])
+    .map(label => `${label}:${firstByLabel[label]}`)
+    .join(" / ");
+}
+
 async function generateSignalOutcomeTasksFromFilteredRows(){
   if(!supabaseClient){
     const ready = initSupabase();
@@ -8780,11 +8814,14 @@ async function generateSignalOutcomeTasksFromFilteredRows(){
     showSignalOutcomeStatus("目前沒有可產生的 Signal Outcomes，請確認 symbol 與 date。", "warning");
     return;
   }
+  const datePreview = signalOutcomeDatePreviewText(taskRows);
 
   try{
-    showSignalOutcomeStatus(`正在檢查 signal_outcomes：${taskRows.length} 筆...`, "info");
+    showSignalOutcomeStatus(`正在檢查 signal_outcomes：${taskRows.length} 筆...${datePreview ? `\n交易日預覽：${datePreview}` : ""}`, "info");
     const ids = taskRows.map(row => row.outcome_id);
     const existingIds = await fetchExistingSignalOutcomeIds(ids);
+    showSignalOutcomeStatus(`正在更新既有未完成追蹤任務的交易日：${existingIds.size} 筆...`, "info");
+    const updatedExisting = await updateExistingPendingSignalOutcomeCheckDates(taskRows, existingIds);
     const rowsToInsert = taskRows.filter(row => !existingIds.has(row.outcome_id));
     if(rowsToInsert.length){
       showSignalOutcomeStatus(`正在新增 ${rowsToInsert.length} 筆 signal_outcomes 追蹤任務...`, "info");
@@ -8795,7 +8832,7 @@ async function generateSignalOutcomeTasksFromFilteredRows(){
     const withFactorSnapshot = rowsToInsert.filter(row => row.factor_snapshot && Object.keys(row.factor_snapshot).length).length;
     const withSourceSnapshotId = rowsToInsert.filter(row => safeValue(row.source_snapshot_id) !== "-").length;
     showSignalOutcomeStatus(
-      `已完成產生追蹤任務：新增 ${rowsToInsert.length} 筆，略過既有 ${existingIds.size} 筆。\n` +
+      `已完成產生追蹤任務：新增 ${rowsToInsert.length} 筆，既有未完成任務已重算交易日 ${updatedExisting} 筆。\n` +
       `已產生 ${rowsToInsert.length} 筆 Signal Outcomes\n` +
       `其中含 trigger_reason：${withTriggerReason} 筆\n` +
       `其中含 factor_snapshot：${withFactorSnapshot} 筆\n` +
