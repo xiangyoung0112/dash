@@ -1480,7 +1480,34 @@ Object.entries(FACTOR_SCHEMA).forEach(([key, meta]) => {
   meta.polarity = meta.polarity || "neutral";
   meta.aliases = Array.from(new Set([key, ...(meta.aliases || [])])).filter(alias => !String(alias).toLowerCase().includes("alpha"));
 });
-["kama", "bb", "momentum", "volume_spike", "dbn", "sortino", "hurst", "score", "atr", "risk_reward_ratio"].forEach(key => {
+// Only expose factors that 股票7.0 can actually persist in buy_snapshots /
+// signal_outcomes.  Rejected-only signals (for example liquidity_poor,
+// ret5_weak and short_downtrend) and alpha are intentionally excluded.
+[
+  "vol_shrink_streak",
+  "vol_below_avg_40",
+  "vol_dry_up",
+  "kama_bull",
+  "ema5_reclaim",
+  "ma_convergence",
+  "macd_turn",
+  "kd_golden",
+  "rsi_neutral",
+  "rsi_recovering",
+  "rsi_overbought",
+  "hurst_trend",
+  "sortino_positive",
+  "low_volatility",
+  "near_breakout",
+  "liquidity_ok",
+  "market_breadth_ok",
+  "dbn",
+  "hurst",
+  "sortino",
+  "score",
+  "atr",
+  "risk_reward_ratio",
+].forEach(key => {
   if(FACTOR_SCHEMA[key]) FACTOR_ANALYSIS_FACTORS.push({ key, label: factorDisplayName(key) });
 });
 /*
