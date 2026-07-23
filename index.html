@@ -4766,13 +4766,18 @@ function normalizedPerformanceSignals(){
 }
 
 function getPerformanceFilters(){
+  const performanceStartDate = document.getElementById("performanceStartDate")?.value || "";
+  const performanceEndDate = document.getElementById("performanceEndDate")?.value || "";
+  const globalStartDate = document.getElementById("globalStartDate")?.value || "";
+  const globalEndDate = document.getElementById("globalEndDate")?.value || "";
   return {
     strategy: document.getElementById("performanceStrategyFilter")?.value || "",
     period: document.getElementById("performancePeriodFilter")?.value || "all",
     sort: document.getElementById("performanceSortSelect")?.value || performanceTrackingSortField || "default",
     minSample: Math.max(0, toNumber(document.getElementById("performanceMinSampleInput")?.value) ?? 0),
-    startDate: document.getElementById("performanceStartDate")?.value || "",
-    endDate: document.getElementById("performanceEndDate")?.value || "",
+    startDate: performanceStartDate || globalStartDate,
+    endDate: performanceEndDate || globalEndDate,
+    dateSource: (performanceStartDate || performanceEndDate) ? "performance" : ((globalStartDate || globalEndDate) ? "global" : ""),
   };
 }
 
@@ -4780,8 +4785,8 @@ function filteredPerformanceSignals(){
   const filters = getPerformanceFilters();
   return normalizedPerformanceSignals().filter(row => {
     if(filters.strategy && row.strategy !== filters.strategy) return false;
-    if(filters.startDate && row.date && row.date < filters.startDate) return false;
-    if(filters.endDate && row.date && row.date > filters.endDate) return false;
+    if(filters.startDate && (!row.date || row.date < filters.startDate)) return false;
+    if(filters.endDate && (!row.date || row.date > filters.endDate)) return false;
     return true;
   });
 }
@@ -4970,8 +4975,8 @@ function getPerformanceRawRows(strategy, period){
     if(label && label !== period) return false;
     if(!label && performanceReturnFromFields(row, period) === null) return false;
     const date = normalizePerformanceDate(row);
-    if(filters.startDate && date && date < filters.startDate) return false;
-    if(filters.endDate && date && date > filters.endDate) return false;
+    if(filters.startDate && (!date || date < filters.startDate)) return false;
+    if(filters.endDate && (!date || date > filters.endDate)) return false;
     return true;
   });
 }
@@ -5190,7 +5195,7 @@ function marketSnapshotByDate(){
 
 function marketPerformanceRows(){
   const marketMap = marketSnapshotByDate();
-  return normalizedPerformanceSignals().map(row => ({
+  return filteredPerformanceSignals().map(row => ({
     ...row,
     market: marketMap.get(String(row.date || "").slice(0, 10)) || null,
   })).filter(row => row.market);
@@ -5300,7 +5305,11 @@ function renderPerformanceTracking(){
   renderPerformanceCards(strategyItems);
   if(!marketDailyLoaded) loadMarketDailySnapshots();
   else renderMarketPerformanceAnalysis();
-  performanceStatus(`已統計 ${filtered.length} 組訊號，策略數 ${strategyItems.length}。`, "success");
+  const filters = getPerformanceFilters();
+  const dateText = filters.startDate || filters.endDate
+    ? `日期 ${filters.startDate || "-"} ~ ${filters.endDate || "-"}${filters.dateSource === "global" ? "（沿用上方篩選）" : ""}，`
+    : "";
+  performanceStatus(`${dateText}已統計 ${filtered.length} 組訊號，策略數 ${strategyItems.length}。`, "success");
 }
 
 function getFactorDefinition(key){
