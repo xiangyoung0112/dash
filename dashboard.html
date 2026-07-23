@@ -496,7 +496,7 @@
         <div class="flex flex-col xl:flex-row xl:items-end justify-between gap-3 mb-4">
           <div>
             <h2 class="text-sm font-bold text-slate-900">績效追蹤</h2>
-            <div id="performanceTrackingStatus" class="text-xs text-slate-400 mt-1">依 Signal Outcomes 統計 D1 / D3 / D10 策略表現。</div>
+            <div id="performanceTrackingStatus" class="text-xs text-slate-400 mt-1">依 Signal Outcomes 統計 D1 / D3 / D5 / D10 策略表現。</div>
           </div>
           <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-2 w-full xl:w-auto">
             <select id="performanceStrategyFilter" class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400">
@@ -506,14 +506,17 @@
               <option value="all">全部週期</option>
               <option value="D1">D1</option>
               <option value="D3">D3</option>
+              <option value="D5">D5</option>
               <option value="D10">D10</option>
             </select>
             <select id="performanceSortSelect" class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400">
               <option value="default">預設排名</option>
               <option value="d1_win_rate">D1 勝率</option>
               <option value="d3_win_rate">D3 勝率</option>
+              <option value="d5_win_rate">D5 勝率</option>
               <option value="d10_win_rate">D10 勝率</option>
               <option value="avg_return">平均報酬</option>
+              <option value="payoff_ratio">賺賠比</option>
               <option value="sample_count">樣本數</option>
             </select>
             <input id="performanceMinSampleInput" type="number" min="0" step="1" value="0" placeholder="最低樣本數" class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400">
@@ -4715,6 +4718,7 @@ function performanceReturnFromFields(row, period){
   const fieldMap = {
     D1: ["d1_return", "return_d1", "d1_return_pct", "d1_pct", "D1"],
     D3: ["d3_return", "return_d3", "d3_return_pct", "d3_pct", "D3"],
+    D5: ["d5_return", "return_d5", "d5_return_pct", "d5_pct", "D5"],
     D10: ["d10_return", "return_d10", "d10_return_pct", "d10_pct", "D10"],
   };
   return toNumber(performanceFirstValue(row, fieldMap[period] || []));
@@ -4731,10 +4735,11 @@ function normalizePerformanceRow(row){
   const returns = {
     D1: performanceReturnFromFields(row, "D1"),
     D3: performanceReturnFromFields(row, "D3"),
+    D5: performanceReturnFromFields(row, "D5"),
     D10: performanceReturnFromFields(row, "D10"),
   };
   const label = String(performanceFirstValue(row, ["check_label", "period", "label"]) || "").toUpperCase();
-  if(["D1", "D3", "D10"].includes(label)){
+  if(["D1", "D3", "D5", "D10"].includes(label)){
     const labelReturn = toNumber(performanceFirstValue(row, ["return_pct", "return", "return_percent", "pct_return"]));
     if(labelReturn !== null) returns[label] = labelReturn;
   }
@@ -4752,10 +4757,10 @@ function normalizedPerformanceSignals(){
       strategy: item.strategy,
       date: item.date,
       symbol: item.symbol,
-      returns: { D1: null, D3: null, D10: null },
+      returns: { D1: null, D3: null, D5: null, D10: null },
       rawRows: [],
     };
-    ["D1", "D3", "D10"].forEach(period => {
+    ["D1", "D3", "D5", "D10"].forEach(period => {
       if(existing.returns[period] === null && item.returns[period] !== null) existing.returns[period] = item.returns[period];
     });
     if(!existing.date && item.date) existing.date = item.date;
@@ -4798,13 +4803,43 @@ function medianNumber(values){
   return nums.length % 2 ? nums[mid] : (nums[mid - 1] + nums[mid]) / 2;
 }
 
+function averageNumericValues(values){
+  const nums = values.filter(value => value !== null);
+  if(!nums.length) return null;
+  return nums.reduce((sum, value) => sum + value, 0) / nums.length;
+}
+
+function payoffRatioFromGainLoss(gain, loss){
+  if(gain === null || gain === undefined || gain <= 0) return null;
+  if(loss === null || loss === undefined) return Infinity;
+  const lossAbs = Math.abs(loss);
+  if(lossAbs === 0) return Infinity;
+  return gain / lossAbs;
+}
+
+function formatPayoffRatio(value, digits = 2){
+  const n = toNumber(value);
+  if(n === null) return value === Infinity ? "∞" : "-";
+  if(!Number.isFinite(n)) return "∞";
+  return `${formatNumber(n, digits)}x`;
+}
+
 function computePeriodStats(rows, period){
   const values = rows.map(row => toNumber(row.returns?.[period])).filter(value => value !== null);
+  const gains = values.filter(value => value > 0);
+  const losses = values.filter(value => value < 0);
   const success = values.filter(value => value > 0).length;
   const failure = values.filter(value => value <= 0).length;
   const total = rows.length;
   const sampleCount = values.length;
   const avgReturn = sampleCount ? values.reduce((sum, value) => sum + value, 0) / sampleCount : null;
+  const avgGain = averageNumericValues(gains);
+  const avgLoss = averageNumericValues(losses);
+  const medianGain = medianNumber(gains);
+  const medianLoss = medianNumber(losses);
+  const maxGain = gains.length ? Math.max(...gains) : null;
+  const minGain = gains.length ? Math.min(...gains) : null;
+  const worstLoss = losses.length ? Math.min(...losses) : null;
   return {
     period,
     total_count: total,
@@ -4817,6 +4852,12 @@ function computePeriodStats(rows, period){
     success_count: success,
     failure_count: failure,
     unfinished_count: Math.max(0, total - sampleCount),
+    avg_gain: avgGain,
+    avg_loss: avgLoss,
+    payoff_ratio: payoffRatioFromGainLoss(avgGain, avgLoss),
+    max_payoff_ratio: payoffRatioFromGainLoss(maxGain, worstLoss),
+    median_payoff_ratio: payoffRatioFromGainLoss(medianGain, medianLoss),
+    min_payoff_ratio: payoffRatioFromGainLoss(minGain, worstLoss),
   };
 }
 
@@ -4832,6 +4873,7 @@ function computeStrategyPerformance(rows){
     periods: {
       D1: computePeriodStats(strategyRows, "D1"),
       D3: computePeriodStats(strategyRows, "D3"),
+      D5: computePeriodStats(strategyRows, "D5"),
       D10: computePeriodStats(strategyRows, "D10"),
     },
   }));
@@ -4841,9 +4883,11 @@ function performanceStrategySortMetric(item, sortKey){
   const p = item.periods;
   if(sortKey === "d1_win_rate") return p.D1.win_rate ?? -Infinity;
   if(sortKey === "d3_win_rate") return p.D3.win_rate ?? -Infinity;
+  if(sortKey === "d5_win_rate") return p.D5.win_rate ?? -Infinity;
   if(sortKey === "d10_win_rate") return p.D10.win_rate ?? -Infinity;
-  if(sortKey === "avg_return") return Math.max(p.D1.avg_return ?? -Infinity, p.D3.avg_return ?? -Infinity, p.D10.avg_return ?? -Infinity);
-  if(sortKey === "sample_count") return Math.max(p.D1.sample_count || 0, p.D3.sample_count || 0, p.D10.sample_count || 0);
+  if(sortKey === "avg_return") return Math.max(p.D1.avg_return ?? -Infinity, p.D3.avg_return ?? -Infinity, p.D5.avg_return ?? -Infinity, p.D10.avg_return ?? -Infinity);
+  if(sortKey === "payoff_ratio") return Math.max(p.D1.payoff_ratio ?? -Infinity, p.D3.payoff_ratio ?? -Infinity, p.D5.payoff_ratio ?? -Infinity, p.D10.payoff_ratio ?? -Infinity);
+  if(sortKey === "sample_count") return Math.max(p.D1.sample_count || 0, p.D3.sample_count || 0, p.D5.sample_count || 0, p.D10.sample_count || 0);
   return p.D10.win_rate ?? -Infinity;
 }
 
@@ -4859,6 +4903,7 @@ function sortStrategyPerformance(items){
       [a.periods.D10.win_rate ?? -Infinity, b.periods.D10.win_rate ?? -Infinity],
       [a.periods.D10.avg_return ?? -Infinity, b.periods.D10.avg_return ?? -Infinity],
       [a.periods.D10.sample_count || 0, b.periods.D10.sample_count || 0],
+      [a.periods.D5.win_rate ?? -Infinity, b.periods.D5.win_rate ?? -Infinity],
       [a.periods.D3.win_rate ?? -Infinity, b.periods.D3.win_rate ?? -Infinity],
       [a.periods.D1.win_rate ?? -Infinity, b.periods.D1.win_rate ?? -Infinity],
     ];
@@ -4902,14 +4947,17 @@ function renderPerformanceKpis(rows){
   if(!el) return;
   const d1 = computePeriodStats(rows, "D1");
   const d3 = computePeriodStats(rows, "D3");
+  const d5 = computePeriodStats(rows, "D5");
   const d10 = computePeriodStats(rows, "D10");
   el.innerHTML = [
     statCard("總追蹤訊號數", rows.length),
     statCard("已完成 D1 樣本數", d1.sample_count),
     statCard("已完成 D3 樣本數", d3.sample_count),
+    statCard("已完成 D5 樣本數", d5.sample_count),
     statCard("已完成 D10 樣本數", d10.sample_count),
     statCard("整體 D1 勝率", formatPercent(d1.win_rate, 1), null, performanceWinRateClass(d1.win_rate)),
     statCard("整體 D3 勝率", formatPercent(d3.win_rate, 1), null, performanceWinRateClass(d3.win_rate)),
+    statCard("整體 D5 勝率", formatPercent(d5.win_rate, 1), null, performanceWinRateClass(d5.win_rate)),
     statCard("整體 D10 勝率", formatPercent(d10.win_rate, 1), null, performanceWinRateClass(d10.win_rate)),
   ].join("");
 }
@@ -4932,6 +4980,10 @@ function performanceRowSortValue(row, key){
   if(key === "median_return") return stat.median_return ?? -Infinity;
   if(key === "max_return") return stat.max_return ?? -Infinity;
   if(key === "min_return") return stat.min_return ?? -Infinity;
+  if(key === "payoff_ratio") return stat.payoff_ratio ?? -Infinity;
+  if(key === "max_payoff_ratio") return stat.max_payoff_ratio ?? -Infinity;
+  if(key === "median_payoff_ratio") return stat.median_payoff_ratio ?? -Infinity;
+  if(key === "min_payoff_ratio") return stat.min_payoff_ratio ?? -Infinity;
   if(key === "success_count") return stat.success_count ?? -Infinity;
   if(key === "failure_count") return stat.failure_count ?? -Infinity;
   if(key === "unfinished_count") return stat.unfinished_count ?? -Infinity;
@@ -5081,7 +5133,7 @@ function renderPerformanceTable(items){
   const el = document.getElementById("performanceTableBox");
   if(!el) return;
   const filters = getPerformanceFilters();
-  const periods = filters.period === "all" ? ["D1", "D3", "D10"] : [filters.period];
+  const periods = filters.period === "all" ? ["D1", "D3", "D5", "D10"] : [filters.period];
   const rows = [];
   items.forEach(item => {
     periods.forEach(period => {
@@ -5095,7 +5147,7 @@ function renderPerformanceTable(items){
     el.innerHTML = `<div class="text-center text-slate-400 py-10">目前尚無符合篩選條件的績效資料</div>`;
     return;
   }
-  el.innerHTML = `<table class="min-w-[920px] text-xs sm:text-sm">
+  el.innerHTML = `<table class="min-w-[1180px] text-xs sm:text-sm">
     <thead><tr class="bg-slate-50 text-slate-500 text-[11px] uppercase tracking-wide">
       ${performanceTableHeader("策略", "strategy")}
       ${performanceTableHeader("週期", "period")}
@@ -5105,6 +5157,10 @@ function renderPerformanceTable(items){
       ${performanceTableHeader("中位數", "median_return")}
       ${performanceTableHeader("最高", "max_return")}
       ${performanceTableHeader("最低", "min_return")}
+      ${performanceTableHeader("賺賠比", "payoff_ratio")}
+      ${performanceTableHeader("最大賺賠", "max_payoff_ratio")}
+      ${performanceTableHeader("中位賺賠", "median_payoff_ratio")}
+      ${performanceTableHeader("最小賺賠", "min_payoff_ratio")}
       ${performanceTableHeader("成功", "success_count")}
       ${performanceTableHeader("失敗", "failure_count")}
       ${performanceTableHeader("未完成", "unfinished_count")}
@@ -5121,6 +5177,10 @@ function renderPerformanceTable(items){
         <td class="px-3 py-2 font-mono ${pnlClass(s.median_return)}">${formatPercent(s.median_return, 2)}</td>
         <td class="px-3 py-2 font-mono ${pnlClass(s.max_return)}">${formatPercent(s.max_return, 2)}</td>
         <td class="px-3 py-2 font-mono ${pnlClass(s.min_return)}">${formatPercent(s.min_return, 2)}</td>
+        <td class="px-3 py-2 font-mono text-slate-700">${formatPayoffRatio(s.payoff_ratio)}</td>
+        <td class="px-3 py-2 font-mono text-emerald-600">${formatPayoffRatio(s.max_payoff_ratio)}</td>
+        <td class="px-3 py-2 font-mono text-slate-700">${formatPayoffRatio(s.median_payoff_ratio)}</td>
+        <td class="px-3 py-2 font-mono text-amber-600">${formatPayoffRatio(s.min_payoff_ratio)}</td>
         <td class="px-3 py-2 font-mono text-emerald-600">${formatNumber(s.success_count, 0)}</td>
         <td class="px-3 py-2 font-mono text-rose-600">${formatNumber(s.failure_count, 0)}</td>
         <td class="px-3 py-2 font-mono text-slate-500">${formatNumber(s.unfinished_count, 0)}</td>
@@ -5131,7 +5191,7 @@ function renderPerformanceTable(items){
 }
 
 function bestPerformancePeriod(item){
-  const entries = ["D1", "D3", "D10"].map(period => [period, item.periods[period]]);
+  const entries = ["D1", "D3", "D5", "D10"].map(period => [period, item.periods[period]]);
   const completed = entries.filter(([, stat]) => stat.sample_count > 0);
   if(!completed.length) return "-";
   completed.sort((a, b) => (b[1].win_rate ?? -Infinity) - (a[1].win_rate ?? -Infinity) || (b[1].avg_return ?? -Infinity) - (a[1].avg_return ?? -Infinity));
@@ -5140,7 +5200,7 @@ function bestPerformancePeriod(item){
 
 function performanceRiskHint(item){
   const d10 = item.periods.D10;
-  const worst = Math.min(item.periods.D1.min_return ?? 0, item.periods.D3.min_return ?? 0, d10.min_return ?? 0);
+  const worst = Math.min(item.periods.D1.min_return ?? 0, item.periods.D3.min_return ?? 0, item.periods.D5.min_return ?? 0, d10.min_return ?? 0);
   if(d10.sample_count === 0) return "D10 尚未完成，暫不判斷長期穩定性。";
   if((d10.win_rate ?? 0) < 45) return "D10 勝率偏低，建議保守觀察。";
   if(worst <= -8) return "曾出現較大回撤，需留意風險控管。";
@@ -5154,6 +5214,7 @@ function periodMiniLine(period, stat){
       <span class="font-mono text-xs ${performanceWinRateClass(stat.win_rate)}">${formatPercent(stat.win_rate, 1)}</span>
     </div>
     <div class="mt-1 text-[11px] text-slate-500">平均 <span class="font-mono ${pnlClass(stat.avg_return)}">${formatPercent(stat.avg_return, 2)}</span> / 樣本 ${formatNumber(stat.sample_count, 0)}</div>
+    <div class="mt-1 text-[11px] text-slate-500">賺賠 <span class="font-mono text-slate-700">${formatPayoffRatio(stat.payoff_ratio)}</span> / 中位 <span class="font-mono text-slate-700">${formatPayoffRatio(stat.median_payoff_ratio)}</span></div>
   </div>`;
 }
 
@@ -5161,7 +5222,7 @@ function renderPerformanceCards(items){
   const el = document.getElementById("performanceStrategyCards");
   if(!el) return;
   const filters = getPerformanceFilters();
-  const visible = items.filter(item => ["D1", "D3", "D10"].some(period => item.periods[period].sample_count >= filters.minSample));
+  const visible = items.filter(item => ["D1", "D3", "D5", "D10"].some(period => item.periods[period].sample_count >= filters.minSample));
   if(!visible.length){
     el.innerHTML = `<div class="text-center text-slate-400 py-8 lg:col-span-2 xl:col-span-3">目前沒有可顯示的策略績效卡片</div>`;
     return;
@@ -5175,9 +5236,10 @@ function renderPerformanceCards(items){
         </div>
         <span class="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700">最佳 ${escapeHtml(bestPerformancePeriod(item))}</span>
       </div>
-      <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-3">
+      <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2 mt-3">
         ${periodMiniLine("D1", item.periods.D1)}
         ${periodMiniLine("D3", item.periods.D3)}
+        ${periodMiniLine("D5", item.periods.D5)}
         ${periodMiniLine("D10", item.periods.D10)}
       </div>
       <div class="mt-3 rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-700">${escapeHtml(performanceRiskHint(item))}</div>
@@ -5206,6 +5268,7 @@ function summarizeMarketPerformance(rows){
     sample_count: rows.length,
     d1: computePeriodStats(rows, "D1"),
     d3: computePeriodStats(rows, "D3"),
+    d5: computePeriodStats(rows, "D5"),
     d10: computePeriodStats(rows, "D10"),
   };
   return stats;
@@ -5252,9 +5315,11 @@ function renderMarketPerformanceAnalysis(){
       <td class="px-3 py-2 font-mono">${formatNumber(item.stats.sample_count, 0)}</td>
       <td class="px-3 py-2 font-mono ${performanceWinRateClass(item.stats.d1.win_rate)}">${formatPercent(item.stats.d1.win_rate, 1)}</td>
       <td class="px-3 py-2 font-mono ${performanceWinRateClass(item.stats.d3.win_rate)}">${formatPercent(item.stats.d3.win_rate, 1)}</td>
+      <td class="px-3 py-2 font-mono ${performanceWinRateClass(item.stats.d5.win_rate)}">${formatPercent(item.stats.d5.win_rate, 1)}</td>
       <td class="px-3 py-2 font-mono ${performanceWinRateClass(item.stats.d10.win_rate)}">${formatPercent(item.stats.d10.win_rate, 1)}</td>
       <td class="px-3 py-2 font-mono ${pnlClass(item.stats.d1.avg_return)}">${formatPercent(item.stats.d1.avg_return, 2)}</td>
       <td class="px-3 py-2 font-mono ${pnlClass(item.stats.d3.avg_return)}">${formatPercent(item.stats.d3.avg_return, 2)}</td>
+      <td class="px-3 py-2 font-mono ${pnlClass(item.stats.d5.avg_return)}">${formatPercent(item.stats.d5.avg_return, 2)}</td>
       <td class="px-3 py-2 font-mono ${pnlClass(item.stats.d10.avg_return)}">${formatPercent(item.stats.d10.avg_return, 2)}</td>
     </tr>`).join("");
   const byStrategyDirection = groupMarketPerformance(rows, row => `${row.strategy}__${row.market.direction || "unknown"}`)
@@ -5267,6 +5332,7 @@ function renderMarketPerformanceAnalysis(){
       <td class="px-3 py-2 font-mono">${formatNumber(item.stats.sample_count, 0)}</td>
       <td class="px-3 py-2 font-mono ${performanceWinRateClass(item.stats.d1.win_rate)}">${formatPercent(item.stats.d1.win_rate, 1)}</td>
       <td class="px-3 py-2 font-mono ${performanceWinRateClass(item.stats.d3.win_rate)}">${formatPercent(item.stats.d3.win_rate, 1)}</td>
+      <td class="px-3 py-2 font-mono ${performanceWinRateClass(item.stats.d5.win_rate)}">${formatPercent(item.stats.d5.win_rate, 1)}</td>
       <td class="px-3 py-2 font-mono ${performanceWinRateClass(item.stats.d10.win_rate)}">${formatPercent(item.stats.d10.win_rate, 1)}</td>
       <td class="px-3 py-2 font-mono ${pnlClass(item.stats.d10.avg_return)}">${formatPercent(item.stats.d10.avg_return, 2)}</td>
     </tr>`;
@@ -5281,8 +5347,8 @@ function renderMarketPerformanceAnalysis(){
       <td class="px-3 py-2 font-mono ${pnlClass(item.stats.d10.avg_return)}">${formatPercent(item.stats.d10.avg_return, 2)}</td>
     </tr>`).join("");
   box.innerHTML = [
-    marketPerformanceTable("依大盤方向統計", th(["direction", "樣本數", "D1 正報酬勝率", "D3 正報酬勝率", "D10 正報酬勝率", "平均 D1 報酬", "平均 D3 報酬", "平均 D10 報酬"]), directionRows, "目前沒有可對應的大盤方向資料"),
-    marketPerformanceTable("依 strategy + direction 統計", th(["strategy", "direction", "樣本數", "D1 正報酬勝率", "D3 正報酬勝率", "D10 正報酬勝率", "平均 D10 報酬"]), strategyRows, "目前沒有 strategy + direction 資料"),
+    marketPerformanceTable("依大盤方向統計", th(["direction", "樣本數", "D1 正報酬勝率", "D3 正報酬勝率", "D5 正報酬勝率", "D10 正報酬勝率", "平均 D1 報酬", "平均 D3 報酬", "平均 D5 報酬", "平均 D10 報酬"]), directionRows, "目前沒有可對應的大盤方向資料"),
+    marketPerformanceTable("依 strategy + direction 統計", th(["strategy", "direction", "樣本數", "D1 正報酬勝率", "D3 正報酬勝率", "D5 正報酬勝率", "D10 正報酬勝率", "平均 D10 報酬"]), strategyRows, "目前沒有 strategy + direction 資料"),
     marketPerformanceTable("依 market_regime 統計", th(["market_regime", "樣本數", "D10 正報酬勝率", "平均 D10 報酬"]), regimeRows, "目前沒有 market_regime 資料"),
   ].join("");
 }
